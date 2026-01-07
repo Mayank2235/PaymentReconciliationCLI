@@ -1,0 +1,5 @@
+transaction_id,amount,date,reference
+TXN-901,1500.00,2024-01-11,INV-1001
+TXN-902,5000.00,2024-01-13,INV-1002
+TXN-903,10000.00,2024-01-22,Payment for INV-1004
+TXN-904,50.00,2024-01-25,Unknown

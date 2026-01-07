@@ -1,0 +1,13 @@
+com\finance\IngestionService.class
+com\finance\ReconciliationStatus.class
+com\finance\ReconciliationResult.class
+com\finance\ReportingService.class
+com\finance\Payment.class
+com\finance\ReconciliationRepository.class
+com\finance\InvoiceRepository.class
+com\finance\Invoice.class
+com\finance\ReconciliationApplication.class
+com\finance\ReconciliationService.class
+com\finance\PaymentRepository.class
+com\finance\AuditLog.class
+com\finance\AuditLogRepository.class
