@@ -1,129 +1,128 @@
-# Automated Payment Reconciliation System (CLI)
+Automated Payment Reconciliation System
+Setup and Execution Guide
 
-Enterprise-grade CLI tool for reconciling finance invoices with bank payments.
+This guide explains how to set up and run the Automated Payment Reconciliation System on your local machine.
 
-## Tech Stack
-- Java 21
-- Spring Boot 3.2
-- PostgreSQL
-- Maven
+1. Prerequisites
 
-HOW EVERTHING WORKS
+Before running the project, ensure the following software is installed on your system:
 
-1. Executive Summary
-What is this tool? This is a software application designed for finance teams. It replaces the manual work of staring at Excel spreadsheets to match "Invoices Sent" with "Payments Received" from the bank.
+Java (JDK 17 or later)
 
-What does it do?
+Apache Maven
 
-Reads Data: It takes CSV files containing thousands of invoices and bank transactions.
+Python 3
 
-Matches Them: It automatically figures out which payment belongs to which invoice using logic (Exact amounts, Invoice numbers).
+PostgreSQL
 
-Finds Problems: It flags partial payments or missing payments for human review.
+Visual Studio Code (VS Code)
 
-Reports: It creates a summary of how much money has been successfully reconciled.
+2. Database Setup
 
-2. How It Works (The "Big Picture")
-Imagine a funnel. You pour raw data into the top. Inside the funnel, the system organizes the data, compares it, and filters it. At the bottom, clean, matched reports come out.
+Open PostgreSQL.
 
-The Workflow:
+Create a new database with the following name:
 
-Ingestion: The system reads invoices.csv and payments.csv and saves them into a database (PostgreSQL).
+financial_db
 
-Processing: The "Engine" wakes up, looks at every unmatched payment, and hunts for a matching invoice.
 
-Reporting: The system calculates the results and prints a summary for the user.
+Update the database password in the Spring Boot configuration file so it matches your PostgreSQL credentials.
 
-3. Code Walkthrough (File by File)
-Here is an explanation of every file in the project, written in plain English.
+Example (application.properties):
 
-🛠️ Configuration & Setup
-1. pom.xml (The Shopping List)
+spring.datasource.url=jdbc:postgresql://localhost:5432/financial_db
+spring.datasource.username=postgres
+spring.datasource.password=YOUR_PASSWORD
 
-Analogy: This is the recipe card or shopping list for the project.
 
-What it does: It tells the computer, "I need Java 21, Spring Boot, and the Postgres driver." It ensures all the necessary tools are downloaded before we start cooking.
+Make sure the password is correct, otherwise the application will fail to connect to the database.
 
-2. application.properties (The Settings Menu)
+3. Opening the Project
 
-Analogy: The settings screen on your phone.
+Open Visual Studio Code.
 
-What it does: It holds critical secrets, like the database username (postgres) and password. It also tells the system how to behave (e.g., "Don't show me too many messy logs, just errors").
+Open the entire project folder.
 
-3. ReconciliationApplication.java (The Commander)
+Open the VS Code Terminal.
 
-Analogy: The Traffic Cop or the Main Entrance.
+Paste all the required project code files in the project directory if not already present.
 
-What it does: When you run the program, this file runs first. It looks at what command you typed (e.g., run-all or report) and directs the traffic to the right department.
+4. Running the Application
 
-🗄️ The Data Models (The "Forms")
-4. Invoice.java & Payment.java
+Follow the steps in the exact order below.
 
-Analogy: Blank forms or templates.
+Step 1 — Start the Spring Boot Backend
 
-What it does: These define what an "Invoice" looks like (Number, Amount, Date) and what a "Payment" looks like. They map these Java objects to real tables in the database.
+Run the following command in the VS Code terminal:
 
-5. AuditLog.java
+mvn spring-boot:run
 
-Analogy: A security camera or a diary.
 
-What it does: Every time the system does something important (like "Ingested 50 files"), it writes a permanent entry here. This is crucial for financial compliance so auditors can see what happened.
+This will start the Spring Boot backend server, which handles:
 
-6. ReconciliationResult.java
+API endpoints
 
-Analogy: A paperclip stapling two documents together.
+Database interaction
 
-What it does: When the system finds a match, it creates this record to link a specific Payment ID to a specific Invoice ID permanently.
+Payment and invoice reconciliation logic
 
-💾 The Repositories (The Librarians)
-7. InvoiceRepository.java / PaymentRepository.java
+Step 2 — Launch the Dashboard
 
-Analogy: Librarians.
+Run the following command to open the dashboard:
 
-What it does: The rest of the app doesn't know how to talk to the database directly. It asks these repositories: "Hey, find me all invoices that are unpaid." The repository goes to the database, fetches them, and brings them back.
+start "C:\Users\kosht\OneDrive\Desktop\PaymentReconciliationCLI\dashboard\index.html"
 
-⚙️ The Services (The Workers)
-8. IngestionService.java (The Data Entry Clerk)
 
-Analogy: A fast typist.
+This will open the web dashboard in your browser where you can view reconciliation results.
 
-What it does: It opens the CSV files, reads them line-by-line, checks if the data is valid (e.g., is the amount a number?), and hands it to the Repository to save. It skips bad rows so the whole system doesn't crash.
+Step 3 — Start Invoice Data Generator
 
-9. ReconciliationService.java (The Detective)
+Run the following Python script:
 
-Analogy: Sherlock Holmes.
+python generate_invoices.py
 
-What it does: This is the brain. It pulls up a list of unmatched payments and invoices. It runs logic: "Does this payment reference number match an invoice number?" If yes, match them. If no, "Do the amounts and dates match?" It decides if a payment is MATCHED or PARTIAL.
 
-10. ReportingService.java (The Analyst)
+This script continuously generates dummy invoice data and sends it to the system through the API.
 
-Analogy: The person who writes the daily memo.
+Step 4 — Start Payment Data Generator
 
-What it does: It doesn't change data; it just reads it. It counts how many items are matched vs. unmatched and prints the pretty summary box you see in the terminal.
+Run the following Python script:
 
-4. Why Is This "Enterprise Grade"?
-You might wonder why we have 15 files instead of just one big script.
+python generate_payments.py
 
-Safety: If the database crashes, the code handles it gracefully.
 
-Scalability: We use "Batch Processing" (handling 100 items at a time). If we tried to load 1 million records at once, a simple script would crash your computer. This code won't.
+This script generates dummy payment data and sends it to the system through the API.
 
-Auditability: In finance, you can't just change numbers. We track every action in the AuditLog so no one can "cook the books" without leaving a trace.
+5. System Workflow
 
-Maintainability: The "Detective" logic is separate from the "Data Entry" logic. If we need to change how we read CSVs later, we don't risk breaking the matching logic.
+After all components are running:
 
-5. How to Read the Final Output
-When you saw this:
+Invoice Generator
 
-Plaintext
+Creates random invoice records.
 
-Total Fully Matched : 2
-Total Partial Match : 1
-Pending / Unmatched : 1
-Fully Matched: The system is 100% sure the customer paid the bill. No human action needed.
+Payment Generator
 
-Partial Match: The customer paid, but the amount was slightly off (maybe bank fees or a mistake). A human needs to look at this quickly to approve it.
+Creates random payment records.
 
-Unmatched: The system has no idea who sent this money. A human needs to investigate.
+Spring Boot Backend
 
-Result: instead of reviewing 4 records manually, the human only had to review 1 or 2. In a real company with 10,000 records, this saves hundreds of hours of work.
+Receives the data via APIs.
+
+Stores it in the PostgreSQL database.
+
+Runs the reconciliation algorithm.
+
+Dashboard
+
+Displays matched and unmatched transactions.
+
+6. Important Notes
+
+Ensure PostgreSQL is running before starting the application.
+
+Run all commands in the correct order.
+
+Keep the Spring Boot backend running while generating data.
+
+Verify the API endpoints are reachable before running the Python generators.
