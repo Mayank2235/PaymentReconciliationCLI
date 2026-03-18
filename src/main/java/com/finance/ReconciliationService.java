@@ -1,10 +1,12 @@
 package com.finance;
 
 import org.springframework.data.domain.PageRequest;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 
 @Service
@@ -14,6 +16,11 @@ public class ReconciliationService {
     private final PaymentRepository paymentRepository;
     private final ReconciliationRepository reconciliationRepository;
     private final AuditLogRepository auditLogRepository;
+
+    // 2% tolerance for fuzzy amount matching
+    private static final BigDecimal TOLERANCE_PERCENT = new BigDecimal("0.02");
+    // Full match threshold: within 10 units is considered MATCHED (not PARTIAL)
+    private static final BigDecimal FULL_MATCH_THRESHOLD = new BigDecimal("10.00");
 
     public ReconciliationService(InvoiceRepository invoiceRepository,
                                  PaymentRepository paymentRepository,
@@ -25,65 +32,111 @@ public class ReconciliationService {
         this.auditLogRepository = auditLogRepository;
     }
 
+    @Scheduled(fixedDelay = 30000)
+    @Transactional
+    public void runReconciliation() {
+        runReconciliation(200);
+    }
+
     @Transactional
     public void runReconciliation(int batchSize) {
         long startTime = System.currentTimeMillis();
-        System.out.println("⏳ Starting Reconciliation Engine (Batch Size: " + batchSize + ")...");
+        System.out.println("⏳ Reconciliation Engine running (batch=" + batchSize + ")...");
 
-        // Fetch unprocessed records (Phase 4: using batch size)
-        List<Invoice> invoices = invoiceRepository.findByStatus(ReconciliationStatus.UNMATCHED, PageRequest.of(0, batchSize));
-        List<Payment> payments = paymentRepository.findByStatus(ReconciliationStatus.UNMATCHED, PageRequest.of(0, batchSize));
+        List<Payment> unmatchedPayments = paymentRepository.findByStatus(
+                ReconciliationStatus.UNMATCHED, PageRequest.of(0, batchSize));
 
-        int matchedCount = 0;
-        int partialCount = 0;
+        int matchedCount = 0, partialCount = 0, overpaidCount = 0, duplicateCount = 0;
 
-        for (Payment payment : payments) {
-            // Strategy 1: Exact Match on Reference Note (if it contains Invoice #)
-            Invoice match = invoices.stream()
-                    .filter(inv -> inv.getStatus() == ReconciliationStatus.UNMATCHED) // double check
-                    .filter(inv -> payment.getReferenceNote() != null && payment.getReferenceNote().contains(inv.getInvoiceNumber()))
-                    .findFirst()
-                    .orElse(null);
+        for (Payment payment : unmatchedPayments) {
 
-            // Strategy 2: Fallback to Exact Amount + Date proximity (simplified for this exercise)
+            // ── Guard: Duplicate payment detection ───────────────────────────
+            long existingResults = reconciliationRepository.countByMatchType(ReconciliationStatus.DUPLICATE);
+            // More precise duplicate check: same txId already has a reconciliation record
+            boolean alreadyProcessed = reconciliationRepository.findTop50ByOrderByReconciledAtDesc()
+                    .stream()
+                    .anyMatch(r -> payment.getTransactionId().equals(r.getTransactionId())
+                                  && r.getMatchType() != ReconciliationStatus.DUPLICATE);
+            if (alreadyProcessed) {
+                payment.setStatus(ReconciliationStatus.DUPLICATE);
+                auditLogRepository.save(new AuditLog("DUPLICATE_PAYMENT",
+                        "Duplicate detected: " + payment.getTransactionId()));
+                duplicateCount++;
+                continue;
+            }
+
+            // ── Strategy 1: Reference-based match ───────────────────────────
+            Invoice match = null;
+            if (payment.getReferenceNote() != null && !payment.getReferenceNote().isBlank()) {
+                match = invoiceRepository
+                        .findAll()
+                        .stream()
+                        .filter(inv -> inv.getStatus() == ReconciliationStatus.UNMATCHED
+                                || inv.getStatus() == ReconciliationStatus.PARTIAL)
+                        .filter(inv -> payment.getReferenceNote().contains(inv.getInvoiceNumber()))
+                        .findFirst()
+                        .orElse(null);
+            }
+
+            // ── Strategy 2: Fuzzy amount match (within 2%) ──────────────────
             if (match == null) {
-                match = invoices.stream()
+                final BigDecimal payAmt = payment.getAmount();
+                match = invoiceRepository
+                        .findAll()
+                        .stream()
                         .filter(inv -> inv.getStatus() == ReconciliationStatus.UNMATCHED)
-                        .filter(inv -> inv.getAmount().compareTo(payment.getAmount()) == 0)
+                        .filter(inv -> {
+                            BigDecimal tolerance = inv.getAmount()
+                                    .multiply(TOLERANCE_PERCENT)
+                                    .setScale(2, RoundingMode.HALF_UP);
+                            BigDecimal diff = inv.getAmount().subtract(payAmt).abs();
+                            return diff.compareTo(tolerance) <= 0;
+                        })
                         .findFirst()
                         .orElse(null);
             }
 
             if (match != null) {
-                // Determine Status
-                ReconciliationStatus status = ReconciliationStatus.MATCHED;
-                
-                // Logic for Partial/Overpayment based on tolerance (Simple implementation)
-                BigDecimal diff = match.getAmount().subtract(payment.getAmount());
-                if (diff.abs().compareTo(new BigDecimal("10.00")) < 0 && diff.compareTo(BigDecimal.ZERO) != 0) {
-                    status = ReconciliationStatus.PARTIAL;
-                    partialCount++;
-                } else {
+                BigDecimal remaining = match.getRemainingBalance();
+                BigDecimal payAmt = payment.getAmount();
+                BigDecimal diff = remaining.subtract(payAmt);
+
+                ReconciliationStatus status;
+
+                if (diff.abs().compareTo(FULL_MATCH_THRESHOLD) <= 0) {
+                    // Full match (within threshold)
+                    status = ReconciliationStatus.MATCHED;
+                    match.setRemainingBalance(BigDecimal.ZERO);
+                    match.setStatus(ReconciliationStatus.MATCHED);
                     matchedCount++;
+                } else if (payAmt.compareTo(remaining) > 0) {
+                    // Overpayment
+                    status = ReconciliationStatus.OVERPAID;
+                    match.setRemainingBalance(BigDecimal.ZERO);
+                    match.setStatus(ReconciliationStatus.OVERPAID);
+                    overpaidCount++;
+                } else {
+                    // Partial payment
+                    status = ReconciliationStatus.PARTIAL;
+                    match.setRemainingBalance(remaining.subtract(payAmt));
+                    match.setStatus(ReconciliationStatus.PARTIAL);
+                    partialCount++;
                 }
 
-                // Update Entities
-                match.setStatus(status);
                 payment.setStatus(status);
-                
-                // Save Result
                 reconciliationRepository.save(new ReconciliationResult(match, payment, status));
             }
+            // If no match found, payment stays UNMATCHED
         }
 
-        // Persist updates
-        invoiceRepository.saveAll(invoices);
-        paymentRepository.saveAll(payments);
+        // Persist all entity updates
+        paymentRepository.saveAll(unmatchedPayments);
 
         long duration = System.currentTimeMillis() - startTime;
-        String logMsg = String.format("Batch Processed in %d ms. Matched: %d, Partial: %d", duration, matchedCount, partialCount);
+        String logMsg = String.format(
+                "Batch %dms | Matched:%d | Partial:%d | Overpaid:%d | Duplicate:%d",
+                duration, matchedCount, partialCount, overpaidCount, duplicateCount);
         auditLogRepository.save(new AuditLog("RECONCILIATION_RUN", logMsg));
-
         System.out.println("✔ " + logMsg);
     }
 }
