@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PayRecon Pro | Enterprise Payment Reconciliation</title>
+  <meta name="description" content="Real-time enterprise payment reconciliation dashboard — live transaction monitoring, matching, and reporting." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ── Header ───────────────────────────────────────────────────── -->
+  <header class="header">
+    <div class="header-left">
+      <div class="logo">
+        <div class="logo-icon">₿</div>
+        <div>
+          <div class="logo-title">PayRecon Pro</div>
+          <div class="logo-sub">Enterprise Reconciliation Platform</div>
+        </div>
+      </div>
+    </div>
+    <div class="header-center">
+      <div class="status-pill" id="statusPill">
+        <span class="pulse-dot"></span>
+        <span id="statusText">Connecting…</span>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="live-clock" id="liveClock">--:--:--</div>
+      <div class="header-date" id="liveDate">--</div>
+    </div>
+  </header>
+
+  <!-- ── Main Grid ─────────────────────────────────────────────────── -->
+  <main class="main">
+
+    <!-- ── KPI Cards Row ──────────────────────────────────────────── -->
+    <section class="kpi-row">
+      <div class="kpi-card" id="kpi-invoices">
+        <div class="kpi-icon">📄</div>
+        <div class="kpi-body">
+          <div class="kpi-label">Total Invoices</div>
+          <div class="kpi-value" id="kpiTotalInvoices">0</div>
+        </div>
+        <div class="kpi-sub">Amount: <span id="kpiInvoiceAmt">$0.00</span></div>
+      </div>
+      <div class="kpi-card" id="kpi-payments">
+        <div class="kpi-icon">💳</div>
+        <div class="kpi-body">
+          <div class="kpi-label">Total Payments</div>
+          <div class="kpi-value" id="kpiTotalPayments">0</div>
+        </div>
+        <div class="kpi-sub">Received: <span id="kpiPaymentAmt">$0.00</span></div>
+      </div>
+      <div class="kpi-card accent-green" id="kpi-matched">
+        <div class="kpi-icon">✅</div>
+        <div class="kpi-body">
+          <div class="kpi-label">Matched Amount</div>
+          <div class="kpi-value" id="kpiMatchedAmt">$0.00</div>
+        </div>
+        <div class="kpi-sub">Fully: <span id="kpiFullyMatched">0</span> | Partial: <span id="kpiPartial">0</span></div>
+      </div>
+      <div class="kpi-card accent-amber" id="kpi-outstanding">
+        <div class="kpi-icon">⚠️</div>
+        <div class="kpi-body">
+          <div class="kpi-label">Outstanding Balance</div>
+          <div class="kpi-value" id="kpiOutstanding">$0.00</div>
+        </div>
+        <div class="kpi-sub">Unmatched invoices: <span id="kpiUnmatchedInv">0</span></div>
+      </div>
+    </section>
+
+    <!-- ── Three-column layout ────────────────────────────────────── -->
+    <section class="tri-grid">
+
+      <!-- LEFT: Incoming feeds -->
+      <div class="col-panel">
+
+        <!-- Incoming Invoices -->
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">📄 Incoming Invoices</span>
+            <span class="badge badge-blue" id="badgeInvoices">0</span>
+          </div>
+          <div class="feed" id="invoiceFeed">
+            <div class="feed-empty">Waiting for data…</div>
+          </div>
+        </div>
+
+        <!-- Incoming Payments -->
+        <div class="panel mt">
+          <div class="panel-header">
+            <span class="panel-title">💳 Incoming Payments</span>
+            <span class="badge badge-purple" id="badgePayments">0</span>
+          </div>
+          <div class="feed" id="paymentFeed">
+            <div class="feed-empty">Waiting for data…</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- CENTER: Reconciliation results -->
+      <div class="col-panel col-wide">
+        <div class="panel panel-tall">
+          <div class="panel-header">
+            <span class="panel-title">⚡ Live Reconciliation Stream</span>
+            <div class="tab-group">
+              <button class="tab active" data-tab="all" id="tabAll">All</button>
+              <button class="tab" data-tab="matched" id="tabMatched">Matched</button>
+              <button class="tab" data-tab="partial" id="tabPartial">Partial</button>
+              <button class="tab" data-tab="unmatched" id="tabUnmatched">Unmatched</button>
+            </div>
+          </div>
+          <div class="recon-table-wrapper">
+            <table class="recon-table">
+              <thead>
+                <tr>
+                  <th>Invoice</th>
+                  <th>Transaction</th>
+                  <th>Invoice Amt</th>
+                  <th>Payment Amt</th>
+                  <th>Difference</th>
+                  <th>Status</th>
+                  <th>Time</th>
+                </tr>
+              </thead>
+              <tbody id="reconTableBody">
+                <tr><td colspan="7" class="empty-cell">No reconciliation data yet…</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <!-- Status summary bar -->
+          <div class="status-bar">
+            <div class="status-chip chip-green">
+              <span class="chip-label">MATCHED</span>
+              <span class="chip-val" id="countMatched">0</span>
+            </div>
+            <div class="status-chip chip-amber">
+              <span class="chip-label">PARTIAL</span>
+              <span class="chip-val" id="countPartial">0</span>
+            </div>
+            <div class="status-chip chip-red">
+              <span class="chip-label">UNMATCHED</span>
+              <span class="chip-val" id="countUnmatched">0</span>
+            </div>
+            <div class="status-chip chip-blue">
+              <span class="chip-label">OVERPAID</span>
+              <span class="chip-val" id="countOverpaid">0</span>
+            </div>
+            <div class="status-chip chip-gray">
+              <span class="chip-label">DUPLICATE</span>
+              <span class="chip-val" id="countDuplicate">0</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: Report + stats -->
+      <div class="col-panel">
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">📊 Latest Report</span>
+            <span class="badge badge-green" id="badgeReportTime">--</span>
+          </div>
+          <div class="report-grid">
+            <div class="report-row">
+              <span class="report-label">Total Invoices</span>
+              <span class="report-val" id="rptTotalInvoices">—</span>
+            </div>
+            <div class="report-row">
+              <span class="report-label">Total Payments</span>
+              <span class="report-val" id="rptTotalPayments">—</span>
+            </div>
+            <div class="report-row divider">
+              <span class="report-label">Fully Matched</span>
+              <span class="report-val green" id="rptFullyMatched">—</span>
+            </div>
+            <div class="report-row">
+              <span class="report-label">Partially Matched</span>
+              <span class="report-val amber" id="rptPartial">—</span>
+            </div>
+            <div class="report-row">
+              <span class="report-label">Unmatched Invoices</span>
+              <span class="report-val red" id="rptUnmatched">—</span>
+            </div>
+            <div class="report-row divider">
+              <span class="report-label">Invoice Total</span>
+              <span class="report-val" id="rptInvoiceTotal">—</span>
+            </div>
+            <div class="report-row">
+              <span class="report-label">Total Received</span>
+              <span class="report-val green" id="rptReceived">—</span>
+            </div>
+            <div class="report-row">
+              <span class="report-label">Matched Amount</span>
+              <span class="report-val green" id="rptMatchedAmt">—</span>
+            </div>
+            <div class="report-row highlight">
+              <span class="report-label">Outstanding Balance</span>
+              <span class="report-val amber" id="rptOutstanding">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mini donut / activity log -->
+        <div class="panel mt">
+          <div class="panel-header">
+            <span class="panel-title">📜 Activity Log</span>
+          </div>
+          <div class="activity-log" id="activityLog">
+            <div class="feed-empty">No activity yet…</div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- ── Footer ─────────────────────────────────────────────────────── -->
+  <footer class="footer">
+    <span>PayRecon Pro © 2026 — Enterprise Reconciliation Platform</span>
+    <span>Auto-refresh every <strong>5s</strong> · Backend: <strong>http://localhost:8080</strong></span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
